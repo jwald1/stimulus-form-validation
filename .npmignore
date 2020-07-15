@@ -1,0 +1,15 @@
+.babelrc
+.babelrc.js
+.DS_Store
+.gitignore
+yarn.lock
+yarn-error.log
+webpack.config.js
+
+rollup.config.js
+/.git
+/.vscode
+/coverage
+/node_modules
+/playground
+/spec
