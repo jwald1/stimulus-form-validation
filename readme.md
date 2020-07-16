@@ -121,7 +121,7 @@ Modify the field like so:
 />
 ```
 
-The `data-validation` takes a space delimited method list.
+The `data-validates` takes a space delimited method list.
 
 ## Error messages
 
@@ -159,7 +159,7 @@ Can be overwritten via a data attribute or globaly like so:
 
 ```js
 ValidationController.config({
-  containerSelector: 'your-selector
+  containerSelector: "your-selector",
 })
 ```
 
