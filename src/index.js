@@ -1,55 +1,94 @@
-import ErrorMessage from "./error"
-import ErrorRenderer from "./error_renderer"
-import debounce from "lodash.debounce"
-
+import "./i18n/en"
+import View from "./view"
+import Form from "./form"
+import Element from "./element"
+import Config from "./config"
+import { debounced } from "./utils"
 import { Controller } from "stimulus"
 
-const config = {
-  containerSelector: "[data-field-container]",
-  errorMessageClass: "error-message",
-  useHtml5Messages: false,
-  errorMessagePosition: "end", // start/end
-  containerErrorClass: "container-error", // any css class
-  fieldErrorClass: "field-error", // any css class
-  debounceMs: 150, // integer
-  focusOnError: true, // true/false
-}
-
 export default class extends Controller {
-  static targets = ["submit", "field"]
+  connect = () => this._setup()
+  disconnect = () => this._removeEventListeners()
 
-  static config(options = {}) {
-    Object.assign(config, options)
-  }
+  preventInvalidSubmission = (event) => {
+    if (this.form.isValid()) return
 
-  mergeConfigOverwrites() {
-    const configKeys = Object.keys(config)
+    event.stopImmediatePropagation()
+    event.preventDefault()
 
-    let result = {}
-    const configClone = Object.assign({}, config)
-    configKeys.forEach((key) => {
-      if (this.data.has(key)) {
-        result[key] = this.data.get(key)
+    this.form.elements.forEach((element) => {
+      if (element.isInvalid()) {
+        element.visited = true
+        this.display({
+          target: element.raw,
+          errorMessage: element.cachedErrorMessage,
+        })
       }
     })
 
-    result = Object.assign(configClone, result)
-    result.debounceMs = parseInt(result.debounceMs)
-    result.focusOnError =
-      result.focusOnError === true || result.focusOnError === "true"
-    result.useHTML5Messages =
-      result.useHtml5Messages === true || result.useHtml5Messages === "true"
-
-    return result
+    this._focusFirstElement()
   }
 
-  connect() {
-    this.form.noValidate = true
-    this.config = this.mergeConfigOverwrites()
-    this.validate = debounce(this.validate.bind(this), this.config.debouncedMs)
+  display({ target, errorMessage, previousMessage }) {
+    if (errorMessage === previousMessage && target.dataset.errorDisplayed) {
+      return
+    }
+
+    if (errorMessage) {
+      this.view.displayError(target, errorMessage)
+    } else {
+      this.view.reset(target)
+    }
   }
 
-  get form() {
+  recordVisit = (e) => {
+    const el = new Element(e.target, this.config)
+
+    if (!el.willValidate) return
+    el.visited = true
+
+    this._validate(e)
+  }
+
+  // private
+
+  _setup() {
+    this.rawForm.noValidate = true
+
+    this.config = new Config(this.data)
+    this.form = new Form(this.rawForm, this.config)
+    this.view = new View(this.configurations)
+
+    this.validate = debounced(this._validate, this.configurations.debounceMs)
+
+    this._initialCheck()
+
+    this.rawForm.addEventListener("submit", this.preventInvalidSubmission, true)
+    this.rawForm.addEventListener(
+      "ajax:beforeSend",
+      this.preventInvalidSubmission,
+      true
+    )
+    this.rawForm.addEventListener("input", this.validate, true)
+    this.rawForm.addEventListener("blur", this.recordVisit, true)
+  }
+
+  _removeEventListeners() {
+    this.rawForm.removeEventListener(
+      "submit",
+      this.preventInvalidSubmission,
+      true
+    )
+    this.rawForm.removeEventListener(
+      "ajax:beforeSend",
+      this.preventInvalidSubmission,
+      true
+    )
+    this.rawForm.removeEventListener("input", this.validate, true)
+    this.rawForm.removeEventListener("blur", this.recordVisit, true)
+  }
+
+  get rawForm() {
     if (this.element.nodeName === "FORM") {
       return this.element
     } else {
@@ -57,99 +96,59 @@ export default class extends Controller {
     }
   }
 
-  validateAll = (event) => {
-    let formValid = true
-
-    this.fieldTargets.forEach((field) => {
-      const error = this._errorMessage(field)
-
-      if (error) {
-        formValid = false
-        this.display(field, error)
-      }
-    })
-
-    if (this.hasSubmitTarget) {
-      this.submitTarget.disabled = !formValid
-    }
-
-    if (!formValid) {
-      event.preventDefault()
-      this._focusFirstInput()
-    }
+  async _initialCheck() {
+    this.form
+      .validate()
+      .then(() => this._toggleSubmitButtons(true))
+      .catch(() => this._toggleSubmitButtons(false))
   }
 
-  validate(event) {
+  _validate = async (event) => {
     event.preventDefault()
 
-    if (this._isVisitRequired(event.target)) return
+    let errorMessage
+    const { target } = event
+    const el = new Element(target, this.config)
+    const previousMessage = el.cachedErrorMessage
 
-    this.display(event.target, this._errorMessage(event.target))
+    if (!el.willValidate) return
 
-    if (this.hasSubmitTarget) {
-      this.submitTarget.disabled = this._isFormInvalid()
+    try {
+      await el.validate()
+    } catch (error) {
+      if (typeof error === "string") {
+        errorMessage = error
+      } else {
+        throw error
+      }
+    }
+
+    this._toggleSubmitButtons(this.form.isValid())
+
+    if (el.visited) {
+      this.display({ target, errorMessage, previousMessage })
     }
   }
 
-  recordVisit = (e) => {
-    e.target.dataset.visited = true
+  _toggleSubmitButtons(bool) {
+    if (!this.configurations.disableSubmitButtons) return
 
-    this.validate(e)
+    this.form.submitButtons.forEach((submit) => (submit.disabled = !bool))
   }
 
-  display(element, errorMessage) {
-    new ErrorRenderer(element, errorMessage, this.config).render()
-  }
-
-  // private
-
-  _errorMessage(field) {
-    return new ErrorMessage(
-      field,
-      this.validationMethodGetter.bind(this),
-      this.config.useHtml5Messages
-    ).message()
-  }
-
-  validationMethodGetter(methodName) {
-    return this[methodName]
-  }
-
-  _isFieldValid(field) {
-    return !this._errorMessage(field)
-  }
-
-  _focusFirstInput(e) {
-    if (this.data.get("focusOnError") === "false") {
+  _focusFirstElement() {
+    if (!this.configurations.focusOnError) {
       return
     }
 
-    const firstInputSelector = [
-      "text",
-      "email",
-      "password",
-      "search",
-      "tel",
-      "url",
-    ].map((type) => `input[type="${type}"]:invalid`)
-
-    this.form.querySelector(firstInputSelector.join(",")).focus()
+    this.form.elementsWithError[0].focus()
   }
 
-  _isFormInvalid() {
-    return this.fieldTargets.some((field) => !this._isFieldValid(field))
-  }
-
-  _isVisitRequired(field) {
-    const recordVisitAction = `blur->${this.identifier}#recordVisit`
-
-    if (!field.dataset.action.includes(recordVisitAction)) return false
-    // It's a good practice, not to error until the user visits the field, but only for input fields
-    if (field.nodeName !== "INPUT") return false
-    if (field.dataset.visited) return false
-
-    return ["text", "email", "password", "search", "tel", "url"].includes(
-      field.type
-    )
+  get configurations() {
+    return this.config.configurations
   }
 }
+
+import { addValidator, config } from "./config"
+
+export { addValidator, config }

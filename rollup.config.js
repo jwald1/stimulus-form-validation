@@ -7,7 +7,7 @@ const name = pkg.name
 
 export default {
   input: "src/index.js",
-  external: ["stimulus", "lodash.debounce"],
+  external: ["stimulus"],
   output: [
     {
       file: "dist/index.js",

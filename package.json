@@ -6,7 +6,7 @@
   "umd:main": "dist/index.umd.js",
   "module": "dist/index.m.js",
   "source": "src/index.js",
-  "author": "@adrienpoly",
+  "author": "@jwald1",
   "license": "MIT",
   "external": "stimulus",
   "scripts": {
@@ -15,7 +15,6 @@
     "dev": "rollup -wc"
   },
   "dependencies": {
-    "lodash.debounce": "^4.0.8",
     "stimulus": "^1.1.1"
   },
   "devDependencies": {
@@ -23,6 +22,7 @@
     "@babel/plugin-proposal-class-properties": "^7.10.4",
     "@babel/plugin-transform-classes": "^7.10.4",
     "@babel/preset-env": "^7.10.4",
+    "@rails/ujs": "^6.0.3-2",
     "@rollup/plugin-babel": "^5.1.0",
     "@rollup/plugin-node-resolve": "^8.4.0",
     "babel-loader": "^8.1.0",

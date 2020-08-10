@@ -13,24 +13,6 @@ npm install stimulus-form-validation
 
 ## Basic usage
 
-###
-
-Add inline validation to your forms with ease.
-
-Use any HTML5 validation such as `required`
-Supports custom validations
-Auto disables/enable the submit button when the form's validity status changes.
-
-## Install
-
-```
-yarn add stimulus-form-validation
-Or
-npm install stimulus-form-validation
-```
-
-## Basic usage
-
 ### Register the controller
 
 ```javascript
@@ -45,28 +27,14 @@ application.register("validation", FormValidationController)
 
 ```html
 <div data-controller="validation">
-  <form action="" data-action="validation#validateAll">
-    <!-- add a selector to the field's container -->
-    <!-- Will use the default selector, but it can be configured, see later. -->
+  <form action="">
+    <!-- Add a selector to the field's container -->
+    <!-- We will use the default selector, but it can be configured, see later. -->
     <div data-field-container>
       <label>Name</label>
-
-      <input
-        type="text"
-        data-action="
-          input->validation#validate
-          blur->validation#recordVisit"
-        data-target="validation.field"
-        required
-      />
-      <!-- We added blur->validation#recordVisit, because we only want to show an error to the user after visiting the field -->
+      <input type="text" required />
     </div>
     <button>Submit</button>
-    <!-- To disable the submit button when the form is invalid, just add data-target, like so: -->
-    <button disabled data-target="validation.submit">
-      Submit
-      <!-- Please note, that the initial state has to be set manually -->
-    </button>
   </form>
 </div>
 ```
@@ -74,7 +42,7 @@ application.register("validation", FormValidationController)
 #### CSS
 
 ```css
-[data-field-container] {
+.container-error {
   /* your styles for the field container */
 }
 
@@ -89,39 +57,42 @@ application.register("validation", FormValidationController)
 
 ## Custom validations
 
-##### Most of the time HTML5 validations will suffice
-
-Adding custom validations requires extending the controller.
-
-The validation method will receive the element in question, and it should return an error message when it's invalid.
+First, define your validation function.
+The function should return a Promise and reject with an error message if it fails validation.
 
 ```javascript
-import FormValidationController from "stimulus-form-validation"
+function userNameAvailable(element) {
+  const { value } = element
 
-export default class extends FormValidationController {
-  passwordIsStrong(element) {
-    if (element.value !== "strong") {
-      return "Password is not strong enough"
-    }
-  }
+  return new Promise(async (resolve, reject) => {
+    const available = fetch(`usernameexamples.com/${value}`)
+
+    available ? resolve() : reject("Username not available")
+  })
 }
 ```
 
-Modify the field like so:
+Next, register the function:
 
-```HTML
-<input
-  type="password"
-  data-action="
-    input->validation#validate
-    blur->validation#recordVisit"
-  data-target="validation.field"
-  data-validates="passwordIsStrong"
-  required
-/>
+```javascript
+import { addValidation } from "stimulus-form-validation"
+
+addValidation("userNameAvailable", userNameAvailable)
 ```
 
-The `data-validates` takes a space delimited method list.
+By default the validation function will timeout after 100ms, but you can overwrite it, like so:
+
+```javascript
+addValidation("userNameAvailable", userNameAvailable, 200)
+```
+
+Finaly add `data-validates="userNameAvailable"` to the input element
+
+```HTML
+<input type="text" data-validates="userNameAvailable" required/>
+```
+
+The `data-validates` takes a space delimited method list, so feel free to add more than one validator.
 
 ## Error messages
 
@@ -158,7 +129,9 @@ Default configruation
 Can be overwritten via a data attribute or globaly like so:
 
 ```js
-ValidationController.config({
+import { config } from "stimulus-form-validation"
+
+config({
   containerSelector: "your-selector",
 })
 ```

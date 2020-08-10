@@ -1,10 +1,8 @@
 (function (global, factory) {
-  typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory(require('lodash.debounce'), require('stimulus')) :
-  typeof define === 'function' && define.amd ? define(['lodash.debounce', 'stimulus'], factory) :
-  (global = global || self, global['stimulus-form-validation'] = factory(global.debounce, global.Stimulus));
-}(this, (function (debounce, stimulus) { 'use strict';
-
-  debounce = debounce && Object.prototype.hasOwnProperty.call(debounce, 'default') ? debounce['default'] : debounce;
+  typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports, require('stimulus')) :
+  typeof define === 'function' && define.amd ? define(['exports', 'stimulus'], factory) :
+  (global = global || self, factory(global['stimulus-form-validation'] = {}, global.Stimulus));
+}(this, (function (exports, stimulus) { 'use strict';
 
   function _classCallCheck(instance, Constructor) {
     if (!(instance instanceof Constructor)) {
@@ -122,143 +120,156 @@
     };
   }
 
-  const defaultMessages = {
-    badInput: "is invalid",
-    patternMismatch: "doesn't match %{pattern}",
-    rangeOverflow: "must be less than %{max}",
-    rangeUnderflow: "must be greater than %{min}",
-    stepMismatch: "number is not divisible by %{step}",
-    tooLong: "is too long (maximum is %{maxLength} characters)",
-    tooShort: "is too short (minimum is %{minLength} characters)",
-    typeMismatch: "is not a valid %{type}",
-    valueMissing: "can't be blank"
+  const validators = {};
+  const configurations = {
+    debounceMs: 175,
+    // integer
+    focusOnError: true,
+    // true/false
+    disableSubmitButtons: true,
+    containerSelector: "[data-field-container]",
+    errorMessageClass: "error-message",
+    errorMessagePosition: "end",
+    // start/end
+    containerErrorClass: "container-error",
+    // any css class
+    fieldErrorClass: "field-error" // any css class
+
   };
-  const customMessageAttribute = {
-    badInput: "is invalid",
-    patternMismatch: "patternValidationMessage",
-    rangeOverflow: "maxValidationMessage",
-    rangeUnderflow: "minValidationMessage",
-    stepMismatch: "stepValidationMessage",
-    tooLong: "maxlengthValidationMessage",
-    tooShort: "minlengthValidationMessage",
-    typeMismatch: "typeValidationMessage",
-    valueMissing: "requiredValidationMessage"
+  const locals = {};
+  const validationMap = {
+    badInput: "invalid",
+    patternMismatch: "pattern",
+    rangeOverflow: "max",
+    rangeUnderflow: "min",
+    stepMismatch: "step",
+    tooLong: "maxLength",
+    tooShort: "minLength",
+    typeMismatch: "typeMismatch",
+    valueMissing: "required"
+  };
+
+  const config = (options = {}) => {
+    Object.assign(configurations, options);
+  };
+
+  const timeOutPromise = (promise, timeoutMs) => {
+    const timeOutProm = new Promise((resolve, _) => {
+      setTimeout(() => {
+        resolve();
+      }, timeoutMs);
+    });
+    return el => {
+      return Promise.race([promise(el), timeOutProm]);
+    };
+  };
+
+  const addValidator = (name, func, timeoutMS = 100) => {
+    validators[name] = timeOutPromise(func, timeoutMS);
+  };
+
+  const addLocal = (name, transalation) => {
+    const result = {};
+    Object.keys(validationMap).forEach(validationClass => {
+      const validationName = validationMap[validationClass];
+      result[validationClass] = transalation[validationName];
+    });
+    locals[name] = result;
   };
 
   let _default = /*#__PURE__*/function () {
-    function _default(el, validationMethodGetter, useHtml5Messages) {
+    function _default(dataMap) {
       _classCallCheck(this, _default);
 
-      this.el = el;
-      this.errorType = this.errorType();
-      this.getCustomValidationMethod = validationMethodGetter;
-      this.useHtml5Messages = useHtml5Messages;
+      this.locals = Object.assign({}, locals);
+      this.validators = Object.assign({}, validators);
+      this.configurations = Object.assign({}, configurations); // extract data-attributes
+
+      Object.keys(this.configurations).forEach(key => {
+        if (dataMap.has(key)) {
+          this.configurations[key] = dataMap.get(key);
+        }
+
+        this.configurations.debounceMs = parseInt(this.configurations.debounceMs);
+        this.configurations.focusOnError = this.configurations.focusOnError === true || this.configurations.focusOnError === "true";
+      });
     }
 
     _createClass(_default, [{
-      key: "message",
-      value: function message() {
-        if (this.el.validity.valid && !this.customValidationMessage()) {
-          return;
-        }
-
-        return this.customMessage() || this.defaultMessage() || this._customValidationMessage;
-      } // private
-
-    }, {
-      key: "customMessage",
-      value: function customMessage() {
-        const dataAttribute = customMessageAttribute[this.errorType];
-        return this.el.dataset[dataAttribute];
-      }
-    }, {
-      key: "errorType",
-      value: function errorType() {
-        const errorTypes = Object.keys(defaultMessages);
-
-        for (let index = 0; index < errorTypes.length; index++) {
-          if (this.el.validity[errorTypes[index]]) {
-            return errorTypes[index];
-          }
-        }
-      }
-    }, {
-      key: "customValidationMessage",
-      value: function customValidationMessage() {
-        if (this._customValidationMessage) return this._customValidationMessage;
-        const customValidations = this.el.dataset.validates; // scrub text
-
-        if (!customValidations) return;
-        this._customValidationMessage = customValidations.split(/\s+/).map(validationMethod => {
-          const method = this.getCustomValidationMethod(validationMethod);
-
-          if (!method) {
-            throw new Error(`Custom validation ${validationMethod} is not defined`);
-          }
-
-          return method(this.el);
-        }).filter(message => message)[0];
-        return this._customValidationMessage;
-      }
-    }, {
-      key: "defaultMessage",
-      value: function defaultMessage() {
-        if (this.useHtml5Messages) {
-          return this.el.validationMessage;
-        }
-
-        const message = defaultMessages[this.errorType];
-        return message && message.replace(/\%\{(.*)}/, (_, match) => {
-          return this.el[match];
-        });
+      key: "currentLocal",
+      get: function () {
+        return this.locals["en"];
       }
     }]);
 
     return _default;
   }();
 
+  const transalation = {
+    invalid: "is invalid",
+    pattern: "value doesn't match %{pattern}",
+    max: "value must be less than %{max}",
+    min: "value must be greater than %{min}",
+    step: "number is not divisible by %{step}",
+    maxLength: "too long (maximum is %{maxLength} characters)",
+    minLength: "too short (minimum is %{minLength} characters)",
+    typeMismatch: "not a valid %{type}",
+    required: "can't be blank"
+  };
+  addLocal("en", transalation);
+
   let _default$1 = /*#__PURE__*/function () {
-    function _default(el, errorMessage, config) {
+    function _default(config) {
       _classCallCheck(this, _default);
 
-      this.el = el;
-      this.errorMessage = errorMessage;
       this.config = config;
     }
 
     _createClass(_default, [{
-      key: "render",
-      value: function render() {
-        if (!this.container) return;
+      key: "displayError",
+      value: function displayError(el, errorMessage) {
+        this._insertErrorMessageElement(el);
 
-        this._insertErrorMessageElement();
-
-        if (this.errorMessage) {
-          this.errorElement.textContent = this.errorMessage;
-          this.container.classList.add(this.config.containerErrorClass);
-          this.el.classList.add(this.config.fieldErrorClass);
-        } else {
-          this.container.classList.remove(this.config.containerErrorClass);
-          this.el.classList.remove(this.config.fieldErrorClass);
-          this.errorElement.textContent = "";
-        }
+        this.errorElement(el).textContent = errorMessage;
+        this.container(el).classList.add(this.config.containerErrorClass);
+        el.classList.add(this.config.fieldErrorClass);
+        el.dataset.errorDisplayed = true;
       }
     }, {
+      key: "reset",
+      value: function reset(el) {
+        this.container(el).classList.remove(this.config.containerErrorClass);
+        el.classList.remove(this.config.fieldErrorClass);
+        const errorElement = this.errorElement(el);
+        errorElement && errorElement.remove();
+      }
+    }, {
+      key: "displaySuccess",
+      value: function displaySuccess(el) {
+        this.reset(el);
+      } // private
+
+    }, {
       key: "_insertErrorMessageElement",
-      value: function _insertErrorMessageElement() {
-        if (!this.container.querySelector("." + this.config.errorMessageClass)) {
-          this.container.insertAdjacentHTML(this.errorMessagePosition, `<div class="${this.config.errorMessageClass}"></div>`);
-        }
+      value: function _insertErrorMessageElement(el) {
+        if (this.errorElement(el)) return;
+        this.container(el).insertAdjacentHTML(this.errorMessagePosition, `<div class="${this.config.errorMessageClass}"></div>`);
       }
     }, {
       key: "errorElement",
-      get: function () {
-        return this.container.querySelector("." + this.config.errorMessageClass);
+      value: function errorElement(el) {
+        return this.container(el).querySelector("." + this.config.errorMessageClass);
       }
     }, {
       key: "container",
-      get: function () {
-        return this.el.closest(this.config.containerSelector);
+      value: function container(el) {
+        const _container = el.closest(this.config.containerSelector);
+
+        if (!_container) {
+          throw new Error(`We couldn't find the container for ${el} with selector ${this.config.containerErrorClass}`);
+        }
+
+        return _container;
       }
     }, {
       key: "errorMessagePosition",
@@ -279,23 +290,270 @@
     return _default;
   }();
 
-  const _config = {
-    containerSelector: "[data-field-container]",
-    errorMessageClass: "error-message",
-    useHtml5Messages: false,
-    errorMessagePosition: "end",
-    // start/end
-    containerErrorClass: "container-error",
-    // any css class
-    fieldErrorClass: "field-error",
-    // any css class
-    debounceMs: 150,
-    // integer
-    focusOnError: true // true/false
-
+  const customMessageAttribute = {
+    badInput: "is invalid",
+    patternMismatch: "patternMessage",
+    rangeOverflow: "maxMessage",
+    rangeUnderflow: "minMessage",
+    stepMismatch: "stepMessage",
+    tooLong: "maxLengthMessage",
+    tooShort: "minLengthMessage",
+    typeMismatch: "typeMessage",
+    valueMissing: "requiredMessage"
   };
 
-  let _default$2 = /*#__PURE__*/function (_Controller) {
+  let _default$2 = /*#__PURE__*/function () {
+    function _default(el, config) {
+      _classCallCheck(this, _default);
+
+      this.el = el;
+      this.errorType = this.errorType();
+      this.config = config;
+    }
+
+    _createClass(_default, [{
+      key: "message",
+      value: function message() {
+        return new Promise(async (resolve, reject) => {
+          const fieldValid = this.el.validity.valid;
+
+          if (!fieldValid) {
+            return reject(this.customMessage() || this.defaultMessage());
+          }
+
+          try {
+            resolve(await this.customValidationMessage());
+          } catch (error) {
+            reject(error);
+          }
+        });
+      } // private
+
+    }, {
+      key: "customMessage",
+      value: function customMessage() {
+        const dataAttribute = customMessageAttribute[this.errorType];
+        return this.el.dataset[dataAttribute];
+      }
+    }, {
+      key: "errorType",
+      value: function errorType() {
+        const errorTypes = ["badInput", "patternMismatch", "rangeOverflow", "rangeUnderflow", "stepMismatch", "tooLong", "tooShort", "typeMismatch", "valueMissing"];
+
+        for (let index = 0; index < errorTypes.length; index++) {
+          if (this.el.validity[errorTypes[index]]) {
+            return errorTypes[index];
+          }
+        }
+      }
+    }, {
+      key: "customValidationMessage",
+      value: function customValidationMessage() {
+        const customValidations = this.el.dataset.validates; // scrub text
+
+        if (!customValidations) return;
+        return Promise.all(customValidations.split(/\s+/).map(validationMethod => {
+          const method = this.config.validators[validationMethod];
+
+          if (!method) {
+            throw new Error(`Custom validation ${validationMethod} is not defined`);
+          }
+
+          return method(this.el);
+        }));
+      }
+    }, {
+      key: "defaultMessage",
+      value: function defaultMessage() {
+        const message = this.config.currentLocal[this.errorType];
+        return message && message.replace(/\%\{(.*)}/, (_, match) => {
+          return this.el[match];
+        });
+      }
+    }]);
+
+    return _default;
+  }();
+
+  const validInputTypes = ["checkbox", "color", "date", "datetime-local", "email", "file", "month", "number", "password", "radio", "range", "search", "tel", "text", "time", "url", "week"];
+
+  let _default$3 = /*#__PURE__*/function () {
+    function _default(node, config) {
+      _classCallCheck(this, _default);
+
+      this.raw = node;
+      this.config = config;
+    }
+
+    _createClass(_default, [{
+      key: "isInvalid",
+      value: function isInvalid() {
+        return this.hasCacheErrorMessage();
+      }
+    }, {
+      key: "isValid",
+      value: function isValid() {
+        return !this.isInvalid();
+      }
+    }, {
+      key: "validate",
+      value: function validate() {
+        return new Promise(async (resolve, reject) => {
+          try {
+            await this._errorMessage();
+            this.removeCachedErrorMessage();
+            resolve();
+          } catch (error) {
+            if (typeof error === "string") {
+              this.cacheErrorMessage(error);
+              reject(error);
+            } else {
+              throw error;
+            }
+          }
+        });
+      }
+    }, {
+      key: "cacheErrorMessage",
+      value: function cacheErrorMessage(message) {
+        this.raw.dataset.validationMessageCache = message;
+      }
+    }, {
+      key: "removeCachedErrorMessage",
+      value: function removeCachedErrorMessage() {
+        this.raw.removeAttribute("data-validation-message-cache");
+      }
+    }, {
+      key: "hasCacheErrorMessage",
+      value: function hasCacheErrorMessage() {
+        return this.raw.hasAttribute("data-validation-message-cache");
+      }
+    }, {
+      key: "_errorMessage",
+      value: function _errorMessage() {
+        return new _default$2(this.raw, this.config).message();
+      }
+    }, {
+      key: "visited",
+      set: function (bool) {
+        this.raw.dataset.visited = bool;
+      },
+      get: function () {
+        if (this.raw.dataset.visited) return true;
+        const nodeName = this.raw.nodeName.toLowerCase();
+
+        if (nodeName === "input") {
+          return !["text", "email", "password", "search", "tel", "url"].includes(this.raw.type);
+        } else if (nodeName === "textarea") {
+          return false;
+        } else {
+          return true;
+        }
+      }
+    }, {
+      key: "willValidate",
+      get: function () {
+        if (this.raw.dataset.validationOn) return true;
+        if (this.raw.dataset.validationOff) return false;
+        const elementName = this.raw.nodeName.toLowerCase();
+        const validatable = elementName === "input" && validInputTypes.includes(this.raw.type);
+
+        if (validatable || ["select", "textarea"].includes(elementName)) {
+          return true;
+        } else {
+          return false;
+        }
+      }
+    }, {
+      key: "cachedErrorMessage",
+      get: function () {
+        return this.raw.dataset.validationMessageCache;
+      }
+    }]);
+
+    return _default;
+  }();
+
+  let Form = /*#__PURE__*/function () {
+    function Form(node, config) {
+      _classCallCheck(this, Form);
+
+      this.raw = node;
+      this.config = config;
+    }
+
+    _createClass(Form, [{
+      key: "isInvalid",
+      value: function isInvalid() {
+        return this.elements.some(el => el.isInvalid());
+      }
+    }, {
+      key: "isValid",
+      value: function isValid() {
+        return !this.isInvalid();
+      }
+    }, {
+      key: "validate",
+      value: function validate() {
+        let valid = true;
+        return new Promise((resolve, reject) => {
+          const elements = this.elements;
+          if (!elements.length) resolve();
+          elements.forEach(async (el, index) => {
+            try {
+              await el.validate();
+            } catch (error) {
+              if (typeof error === "string") {
+                valid = false;
+              } else {
+                throw error;
+              }
+            }
+
+            if (index + 1 === elements.length) {
+              valid ? resolve() : reject();
+            }
+          });
+        });
+      } // private
+
+    }, {
+      key: "elements",
+      get: function () {
+        return this._allElements.map(el => new _default$3(el, this.config)).filter(el => el.willValidate);
+      }
+    }, {
+      key: "submitButtons",
+      get: function () {
+        return this._allElements.filter(el => el.type === "submit");
+      }
+    }, {
+      key: "elementsWithError",
+      get: function () {
+        return this.elements.filter(el => el.isInvalid());
+      }
+    }, {
+      key: "_allElements",
+      get: function () {
+        return Array.from(this.raw.elements);
+      }
+    }]);
+
+    return Form;
+  }();
+
+  const debounced = (fn, wait) => {
+    let timeoutId;
+    return (...args) => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        timeoutId = null;
+        fn(...args);
+      }, wait);
+    };
+  };
+
+  let _default$4 = /*#__PURE__*/function (_Controller) {
     _inherits(_default$2, _Controller);
 
     var _super = _createSuper(_default$2);
@@ -307,122 +565,135 @@
 
       _this = _super.call(this, ...args);
 
-      _defineProperty(_assertThisInitialized(_this), "validateAll", event => {
-        let formValid = true;
+      _defineProperty(_assertThisInitialized(_this), "connect", () => _this._setup());
 
-        _this.fieldTargets.forEach(field => {
-          const error = _this._errorMessage(field);
+      _defineProperty(_assertThisInitialized(_this), "disconnect", () => _this._removeEventListeners());
 
-          if (error) {
-            formValid = false;
+      _defineProperty(_assertThisInitialized(_this), "preventInvalidSubmission", event => {
+        if (_this.form.isValid()) return;
+        event.stopImmediatePropagation();
+        event.preventDefault();
 
-            _this.display(field, error);
+        _this.form.elements.forEach(element => {
+          if (element.isInvalid()) {
+            element.visited = true;
+
+            _this.display({
+              target: element.raw,
+              errorMessage: element.cachedErrorMessage
+            });
           }
         });
 
-        if (_this.hasSubmitTarget) {
-          _this.submitTarget.disabled = !formValid;
-        }
-
-        if (!formValid) {
-          event.preventDefault();
-
-          _this._focusFirstInput();
-        }
+        _this._focusFirstElement();
       });
 
       _defineProperty(_assertThisInitialized(_this), "recordVisit", e => {
-        e.target.dataset.visited = true;
+        const el = new _default$3(e.target, _this.config);
+        if (!el.willValidate) return;
+        el.visited = true;
 
-        _this.validate(e);
+        _this._validate(e);
+      });
+
+      _defineProperty(_assertThisInitialized(_this), "_validate", async event => {
+        event.preventDefault();
+        let errorMessage;
+        const {
+          target
+        } = event;
+        const el = new _default$3(target, _this.config);
+        const previousMessage = el.cachedErrorMessage;
+        if (!el.willValidate) return;
+
+        try {
+          await el.validate();
+        } catch (error) {
+          if (typeof error === "string") {
+            errorMessage = error;
+          } else {
+            throw error;
+          }
+        }
+
+        _this._toggleSubmitButtons(_this.form.isValid());
+
+        if (el.visited) {
+          _this.display({
+            target,
+            errorMessage,
+            previousMessage
+          });
+        }
       });
 
       return _this;
     }
 
     _createClass(_default$2, [{
-      key: "mergeConfigOverwrites",
-      value: function mergeConfigOverwrites() {
-        const configKeys = Object.keys(_config);
-        let result = {};
-        const configClone = Object.assign({}, _config);
-        configKeys.forEach(key => {
-          if (this.data.has(key)) {
-            result[key] = this.data.get(key);
-          }
-        });
-        result = Object.assign(configClone, result);
-        result.debounceMs = parseInt(result.debounceMs);
-        result.focusOnError = result.focusOnError === true || result.focusOnError === "true";
-        result.useHTML5Messages = result.useHtml5Messages === true || result.useHtml5Messages === "true";
-        return result;
-      }
-    }, {
-      key: "connect",
-      value: function connect() {
-        this.form.noValidate = true;
-        this.config = this.mergeConfigOverwrites();
-        this.validate = debounce(this.validate.bind(this), this.config.debouncedMs);
-      }
-    }, {
-      key: "validate",
-      value: function validate(event) {
-        event.preventDefault();
-        if (this._isVisitRequired(event.target)) return;
-        this.display(event.target, this._errorMessage(event.target));
-
-        if (this.hasSubmitTarget) {
-          this.submitTarget.disabled = this._isFormInvalid();
-        }
-      }
-    }, {
       key: "display",
-      value: function display(element, errorMessage) {
-        new _default$1(element, errorMessage, this.config).render();
-      } // private
-
-    }, {
-      key: "_errorMessage",
-      value: function _errorMessage(field) {
-        return new _default(field, this.validationMethodGetter.bind(this), this.config.useHtml5Messages).message();
-      }
-    }, {
-      key: "validationMethodGetter",
-      value: function validationMethodGetter(methodName) {
-        return this[methodName];
-      }
-    }, {
-      key: "_isFieldValid",
-      value: function _isFieldValid(field) {
-        return !this._errorMessage(field);
-      }
-    }, {
-      key: "_focusFirstInput",
-      value: function _focusFirstInput(e) {
-        if (this.data.get("focusOnError") === "false") {
+      value: function display({
+        target,
+        errorMessage,
+        previousMessage
+      }) {
+        if (errorMessage === previousMessage && target.dataset.errorDisplayed) {
           return;
         }
 
-        const firstInputSelector = ["text", "email", "password", "search", "tel", "url"].map(type => `input[type="${type}"]:invalid`);
-        this.form.querySelector(firstInputSelector.join(",")).focus();
+        if (errorMessage) {
+          this.view.displayError(target, errorMessage);
+        } else {
+          this.view.reset(target);
+        }
       }
     }, {
-      key: "_isFormInvalid",
-      value: function _isFormInvalid() {
-        return this.fieldTargets.some(field => !this._isFieldValid(field));
-      }
-    }, {
-      key: "_isVisitRequired",
-      value: function _isVisitRequired(field) {
-        const recordVisitAction = `blur->${this.identifier}#recordVisit`;
-        if (!field.dataset.action.includes(recordVisitAction)) return false; // It's a good practice, not to error until the user visits the field, but only for input fields
+      key: "_setup",
+      // private
+      value: function _setup() {
+        this.rawForm.noValidate = true;
+        this.config = new _default(this.data);
+        this.form = new Form(this.rawForm, this.config);
+        this.view = new _default$1(this.configurations);
+        this.validate = debounced(this._validate, this.configurations.debounceMs);
 
-        if (field.nodeName !== "INPUT") return false;
-        if (field.dataset.visited) return false;
-        return ["text", "email", "password", "search", "tel", "url"].includes(field.type);
+        this._initialCheck();
+
+        this.rawForm.addEventListener("submit", this.preventInvalidSubmission, true);
+        this.rawForm.addEventListener("ajax:beforeSend", this.preventInvalidSubmission, true);
+        this.rawForm.addEventListener("input", this.validate, true);
+        this.rawForm.addEventListener("blur", this.recordVisit, true);
       }
     }, {
-      key: "form",
+      key: "_removeEventListeners",
+      value: function _removeEventListeners() {
+        this.rawForm.removeEventListener("submit", this.preventInvalidSubmission, true);
+        this.rawForm.removeEventListener("ajax:beforeSend", this.preventInvalidSubmission, true);
+        this.rawForm.removeEventListener("input", this.validate, true);
+        this.rawForm.removeEventListener("blur", this.recordVisit, true);
+      }
+    }, {
+      key: "_initialCheck",
+      value: async function _initialCheck() {
+        this.form.validate().then(() => this._toggleSubmitButtons(true)).catch(() => this._toggleSubmitButtons(false));
+      }
+    }, {
+      key: "_toggleSubmitButtons",
+      value: function _toggleSubmitButtons(bool) {
+        if (!this.configurations.disableSubmitButtons) return;
+        this.form.submitButtons.forEach(submit => submit.disabled = !bool);
+      }
+    }, {
+      key: "_focusFirstElement",
+      value: function _focusFirstElement() {
+        if (!this.configurations.focusOnError) {
+          return;
+        }
+
+        this.form.elementsWithError[0].focus();
+      }
+    }, {
+      key: "rawForm",
       get: function () {
         if (this.element.nodeName === "FORM") {
           return this.element;
@@ -430,19 +701,21 @@
           return this.element.querySelector("form");
         }
       }
-    }], [{
-      key: "config",
-      value: function config(options = {}) {
-        Object.assign(_config, options);
+    }, {
+      key: "configurations",
+      get: function () {
+        return this.config.configurations;
       }
     }]);
 
     return _default$2;
   }(stimulus.Controller);
 
-  _defineProperty(_default$2, "targets", ["submit", "field"]);
+  exports.addValidator = addValidator;
+  exports.config = config;
+  exports.default = _default$4;
 
-  return _default$2;
+  Object.defineProperty(exports, '__esModule', { value: true });
 
 })));
 //# sourceMappingURL=index.umd.js.map
