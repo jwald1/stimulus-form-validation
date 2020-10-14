@@ -1,4 +1,5 @@
 import Element from "./element"
+import { ValidationError } from "./validator"
 
 export default class Form {
   constructor(node, config) {
@@ -28,6 +29,10 @@ export default class Form {
     return !this.isInvalid()
   }
 
+  markAllAsVisited() {
+    this.elements.forEach((el) => (el.visited = true))
+  }
+
   validate() {
     let valid = true
     return new Promise((resolve, reject) => {
@@ -39,7 +44,7 @@ export default class Form {
         try {
           await el.validate()
         } catch (error) {
-          if (typeof error === "string") {
+          if (error instanceof ValidationError) {
             valid = false
           } else {
             throw error
@@ -47,7 +52,7 @@ export default class Form {
         }
 
         if (index + 1 === elements.length) {
-          valid ? resolve() : reject()
+          valid ? resolve() : reject(new ValidationError("form invalid"))
         }
       })
     })

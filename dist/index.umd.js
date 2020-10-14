@@ -85,6 +85,61 @@
     }
   }
 
+  function _construct(Parent, args, Class) {
+    if (_isNativeReflectConstruct()) {
+      _construct = Reflect.construct;
+    } else {
+      _construct = function _construct(Parent, args, Class) {
+        var a = [null];
+        a.push.apply(a, args);
+        var Constructor = Function.bind.apply(Parent, a);
+        var instance = new Constructor();
+        if (Class) _setPrototypeOf(instance, Class.prototype);
+        return instance;
+      };
+    }
+
+    return _construct.apply(null, arguments);
+  }
+
+  function _isNativeFunction(fn) {
+    return Function.toString.call(fn).indexOf("[native code]") !== -1;
+  }
+
+  function _wrapNativeSuper(Class) {
+    var _cache = typeof Map === "function" ? new Map() : undefined;
+
+    _wrapNativeSuper = function _wrapNativeSuper(Class) {
+      if (Class === null || !_isNativeFunction(Class)) return Class;
+
+      if (typeof Class !== "function") {
+        throw new TypeError("Super expression must either be null or a function");
+      }
+
+      if (typeof _cache !== "undefined") {
+        if (_cache.has(Class)) return _cache.get(Class);
+
+        _cache.set(Class, Wrapper);
+      }
+
+      function Wrapper() {
+        return _construct(Class, arguments, _getPrototypeOf(this).constructor);
+      }
+
+      Wrapper.prototype = Object.create(Class.prototype, {
+        constructor: {
+          value: Wrapper,
+          enumerable: false,
+          writable: true,
+          configurable: true
+        }
+      });
+      return _setPrototypeOf(Wrapper, Class);
+    };
+
+    return _wrapNativeSuper(Class);
+  }
+
   function _assertThisInitialized(self) {
     if (self === void 0) {
       throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
@@ -123,18 +178,13 @@
   const validators = {};
   const configurations = {
     debounceMs: 175,
-    // integer
     focusOnError: true,
-    // true/false
-    disableSubmitButtons: true,
+    disableSubmitButtons: false,
     containerSelector: "[data-field-container]",
     errorMessageClass: "error-message",
     errorMessagePosition: "end",
-    // start/end
     containerErrorClass: "container-error",
-    // any css class
-    fieldErrorClass: "field-error" // any css class
-
+    fieldErrorClass: "field-error"
   };
   const locals = {};
   const validationMap = {
@@ -153,19 +203,8 @@
     Object.assign(configurations, options);
   };
 
-  const timeOutPromise = (promise, timeoutMs) => {
-    const timeOutProm = new Promise((resolve, _) => {
-      setTimeout(() => {
-        resolve();
-      }, timeoutMs);
-    });
-    return el => {
-      return Promise.race([promise(el), timeOutProm]);
-    };
-  };
-
-  const addValidator = (name, func, timeoutMS = 100) => {
-    validators[name] = timeOutPromise(func, timeoutMS);
+  const addValidator = (name, func) => {
+    validators[name] = func;
   };
 
   const addLocal = (name, transalation) => {
@@ -183,8 +222,7 @@
 
       this.locals = Object.assign({}, locals);
       this.validators = Object.assign({}, validators);
-      this.configurations = Object.assign({}, configurations); // extract data-attributes
-
+      this.configurations = Object.assign({}, configurations);
       Object.keys(this.configurations).forEach(key => {
         if (dataMap.has(key)) {
           this.configurations[key] = dataMap.get(key);
@@ -301,6 +339,23 @@
     typeMismatch: "typeMessage",
     valueMissing: "requiredMessage"
   };
+  let ValidationError = /*#__PURE__*/function (_Error) {
+    _inherits(ValidationError, _Error);
+
+    var _super = _createSuper(ValidationError);
+
+    function ValidationError(message) {
+      var _this;
+
+      _classCallCheck(this, ValidationError);
+
+      _this = _super.call(this, message);
+      _this.name = _this.constructor.name;
+      return _this;
+    }
+
+    return ValidationError;
+  }( /*#__PURE__*/_wrapNativeSuper(Error));
 
   let _default$2 = /*#__PURE__*/function () {
     function _default(el, config) {
@@ -318,13 +373,18 @@
           const fieldValid = this.el.validity.valid;
 
           if (!fieldValid) {
-            return reject(this.customMessage() || this.defaultMessage());
+            reject(new ValidationError(this.customMessage() || this.defaultMessage()));
+            return;
           }
 
           try {
             resolve(await this.customValidationMessage());
           } catch (error) {
-            reject(error);
+            if (typeof error === "string") {
+              reject(new ValidationError(error));
+            } else {
+              throw error;
+            }
           }
         });
       } // private
@@ -404,8 +464,8 @@
             this.removeCachedErrorMessage();
             resolve();
           } catch (error) {
-            if (typeof error === "string") {
-              this.cacheErrorMessage(error);
+            if (error instanceof ValidationError) {
+              this.cacheErrorMessage(error.message);
               reject(error);
             } else {
               throw error;
@@ -493,6 +553,11 @@
         return !this.isInvalid();
       }
     }, {
+      key: "markAllAsVisited",
+      value: function markAllAsVisited() {
+        this.elements.forEach(el => el.visited = true);
+      }
+    }, {
       key: "validate",
       value: function validate() {
         let valid = true;
@@ -503,7 +568,7 @@
             try {
               await el.validate();
             } catch (error) {
-              if (typeof error === "string") {
+              if (error instanceof ValidationError) {
                 valid = false;
               } else {
                 throw error;
@@ -511,7 +576,7 @@
             }
 
             if (index + 1 === elements.length) {
-              valid ? resolve() : reject();
+              valid ? resolve() : reject(new ValidationError("form invalid"));
             }
           });
         });
@@ -544,11 +609,17 @@
 
   const debounced = (fn, wait) => {
     let timeoutId;
-    return (...args) => {
+    let target;
+    return e => {
       clearTimeout(timeoutId);
+
+      if (e.target !== target) {
+        return fn(e);
+      }
+
       timeoutId = setTimeout(() => {
         timeoutId = null;
-        fn(...args);
+        fn(e);
       }, wait);
     };
   };
@@ -569,31 +640,53 @@
 
       _defineProperty(_assertThisInitialized(_this), "disconnect", () => _this._removeEventListeners());
 
-      _defineProperty(_assertThisInitialized(_this), "preventInvalidSubmission", event => {
-        if (_this.form.isValid()) return;
-        event.stopImmediatePropagation();
-        event.preventDefault();
-
-        _this.form.elements.forEach(element => {
-          if (element.isInvalid()) {
-            element.visited = true;
-
-            _this.display({
-              target: element.raw,
-              errorMessage: element.cachedErrorMessage
-            });
-          }
-        });
-
-        _this._focusFirstElement();
-      });
-
       _defineProperty(_assertThisInitialized(_this), "recordVisit", e => {
         const el = new _default$3(e.target, _this.config);
         if (!el.willValidate) return;
         el.visited = true;
 
         _this._validate(e);
+      });
+
+      _defineProperty(_assertThisInitialized(_this), "_preventInvalidSubmission", event => {
+        if (_this._configurations.disableSubmitButtons) {
+          if (_this._form.isValid()) return;
+          event.stopImmediatePropagation();
+          event.stopPropagation();
+          event.preventDefault();
+
+          _this._displayFormErrors();
+        }
+
+        const {
+          submitter
+        } = event;
+
+        if (submitter.hasAttribute("data-validation-submitter")) {
+          submitter.remove();
+          return;
+        }
+
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        event.preventDefault();
+        if (_this.validationInProgress) return;
+        _this.validationInProgress = true;
+
+        _this._form.validate().then(() => {
+          _this.validationInProgress = false;
+
+          _this._submitWithCustomSubmitter(submitter);
+        }).catch(error => {
+          if (error instanceof ValidationError) {
+            _this.validationInProgress = false;
+
+            _this._displayFormErrors();
+          } else {
+            console.log(error);
+            throw error;
+          }
+        });
       });
 
       _defineProperty(_assertThisInitialized(_this), "_validate", async event => {
@@ -608,23 +701,26 @@
 
         try {
           await el.validate();
+
+          if (target.type === "radio") {
+            await _this._form.validate().catch(() => {});
+          }
         } catch (error) {
-          if (typeof error === "string") {
-            errorMessage = error;
+          if (error instanceof ValidationError) {
+            errorMessage = error.message;
           } else {
             throw error;
           }
         }
 
-        _this._toggleSubmitButtons(_this.form.isValid());
+        _this._toggleSubmitButtons(_this._form.isValid());
 
-        if (el.visited) {
-          _this.display({
-            target,
-            errorMessage,
-            previousMessage
-          });
-        }
+        _this.display({
+          target,
+          errorMessage,
+          previousMessage,
+          visited: el.visited
+        });
       });
 
       return _this;
@@ -635,65 +731,143 @@
       value: function display({
         target,
         errorMessage,
-        previousMessage
+        previousMessage,
+        visited
       }) {
         if (errorMessage === previousMessage && target.dataset.errorDisplayed) {
           return;
         }
 
         if (errorMessage) {
-          this.view.displayError(target, errorMessage);
+          if (visited) {
+            this._view.displayError(target, errorMessage);
+          }
         } else {
-          this.view.reset(target);
+          this._view.reset(target);
         }
       }
     }, {
       key: "_setup",
       // private
       value: function _setup() {
-        this.rawForm.noValidate = true;
+        this.form.noValidate = true;
         this.config = new _default(this.data);
-        this.form = new Form(this.rawForm, this.config);
-        this.view = new _default$1(this.configurations);
-        this.validate = debounced(this._validate, this.configurations.debounceMs);
+        this._form = new Form(this.form, this.config);
+        this._view = new _default$1(this._configurations);
+        this.validate = debounced(this._validate, this._configurations.debounceMs);
 
-        this._initialCheck();
+        if (this._configurations.disableSubmitButtons) {
+          this._setupMutiationObserver();
 
-        this.rawForm.addEventListener("submit", this.preventInvalidSubmission, true);
-        this.rawForm.addEventListener("ajax:beforeSend", this.preventInvalidSubmission, true);
-        this.rawForm.addEventListener("input", this.validate, true);
-        this.rawForm.addEventListener("blur", this.recordVisit, true);
+          if (!this.data.has("validated")) this._initialCheck();
+        }
+
+        this.form.addEventListener("submit", this._preventInvalidSubmission, true);
+        this.form.addEventListener("input", this.validate, true);
+        this.form.addEventListener("valueUpdated", this.validate, true);
+        this.form.addEventListener("blur", this.recordVisit, true);
       }
     }, {
       key: "_removeEventListeners",
       value: function _removeEventListeners() {
-        this.rawForm.removeEventListener("submit", this.preventInvalidSubmission, true);
-        this.rawForm.removeEventListener("ajax:beforeSend", this.preventInvalidSubmission, true);
-        this.rawForm.removeEventListener("input", this.validate, true);
-        this.rawForm.removeEventListener("blur", this.recordVisit, true);
+        this.mutationObserver && this.mutationObserver.disconnect();
+        this.form.removeEventListener("submit", this._preventInvalidSubmission, true);
+        this.form.removeEventListener("valueUpdated", this.validate, true);
+        this.form.removeEventListener("input", this.validate, true);
+        this.form.removeEventListener("blur", this.recordVisit, true);
+      }
+    }, {
+      key: "_setupMutiationObserver",
+      value: function _setupMutiationObserver() {
+        this.mutationObserver = new MutationObserver(mutationList => {
+          mutationList.forEach(({
+            addedNodes
+          }) => {
+            if (!addedNodes || !addedNodes.length) return;
+            addedNodes.forEach(node => {
+              if (["select", "input"].includes(node.nodeName.toLowerCase())) {
+                // validate
+                addedNodes = true;
+                const el = new _default$3(node, this.config);
+                el.validate().catch(() => this._toggleSubmitButtons(false)); // toggle submit
+              } else if (node.querySelector && node.querySelector("input, select")) {
+                node.querySelectorAll("input, select").forEach(el => {
+                  // validate
+                  el = new _default$3(el, this.config); // toggle submit
+
+                  el.validate().catch(() => this._toggleSubmitButtons(false));
+                });
+              }
+            });
+            if (addedNodes) this._toggleSubmitButtons(this._form.isValid());
+          });
+        });
+        this.mutationObserver.observe(this.form, {
+          childList: true,
+          subtree: true
+        });
       }
     }, {
       key: "_initialCheck",
       value: async function _initialCheck() {
-        this.form.validate().then(() => this._toggleSubmitButtons(true)).catch(() => this._toggleSubmitButtons(false));
+        this._form.validate().then(() => this._toggleSubmitButtons(true)).catch(() => this._toggleSubmitButtons(false));
       }
     }, {
       key: "_toggleSubmitButtons",
       value: function _toggleSubmitButtons(bool) {
-        if (!this.configurations.disableSubmitButtons) return;
-        this.form.submitButtons.forEach(submit => submit.disabled = !bool);
+        if (!this._configurations.disableSubmitButtons) return;
+
+        this._form.submitButtons.forEach(submit => {
+          submit.disabled = !bool;
+        });
       }
     }, {
       key: "_focusFirstElement",
       value: function _focusFirstElement() {
-        if (!this.configurations.focusOnError) {
+        if (!this._configurations.focusOnError) {
           return;
         }
 
-        this.form.elementsWithError[0].focus();
+        const element = this._form.elementsWithError[0];
+        element && element.raw.focus();
       }
     }, {
-      key: "rawForm",
+      key: "_submitWithCustomSubmitter",
+      value: function _submitWithCustomSubmitter(originalSubmitter) {
+        const input = document.createElement("template");
+        input.innerHTML = `
+      <input type="submit" 
+      style="display: none;" 
+      data-validation-submitter 
+      name="${originalSubmitter.name}" 
+      value="${originalSubmitter.value}" 
+    />
+    `;
+
+        this._form.raw.appendChild(input.content);
+
+        setTimeout(() => {
+          this._form.raw.querySelector("[data-validation-submitter]").click();
+        });
+      }
+    }, {
+      key: "_displayFormErrors",
+      value: function _displayFormErrors() {
+        this._form.elements.forEach(element => {
+          if (element.isInvalid()) {
+            element.visited = true;
+            this.display({
+              target: element.raw,
+              errorMessage: element.cachedErrorMessage,
+              visited: true
+            });
+          }
+        });
+
+        this._focusFirstElement();
+      }
+    }, {
+      key: "form",
       get: function () {
         if (this.element.nodeName === "FORM") {
           return this.element;
@@ -702,7 +876,7 @@
         }
       }
     }, {
-      key: "configurations",
+      key: "_configurations",
       get: function () {
         return this.config.configurations;
       }

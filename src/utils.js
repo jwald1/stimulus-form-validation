@@ -1,12 +1,17 @@
 export const debounced = (fn, wait) => {
   let timeoutId
+  let target
 
-  return (...args) => {
+  return (e) => {
     clearTimeout(timeoutId)
+
+    if (e.target !== target) {
+      return fn(e)
+    }
 
     timeoutId = setTimeout(() => {
       timeoutId = null
-      fn(...args)
+      fn(e)
     }, wait)
   }
 }

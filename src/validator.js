@@ -10,6 +10,13 @@ const customMessageAttribute = {
   valueMissing: "requiredMessage",
 }
 
+export class ValidationError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = this.constructor.name
+  }
+}
+
 export default class {
   constructor(el, config) {
     this.el = el
@@ -22,13 +29,21 @@ export default class {
       const fieldValid = this.el.validity.valid
 
       if (!fieldValid) {
-        return reject(this.customMessage() || this.defaultMessage())
+        reject(
+          new ValidationError(this.customMessage() || this.defaultMessage())
+        )
+
+        return
       }
 
       try {
         resolve(await this.customValidationMessage())
       } catch (error) {
-        reject(error)
+        if (typeof error === "string") {
+          reject(new ValidationError(error))
+        } else {
+          throw error
+        }
       }
     })
   }

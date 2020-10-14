@@ -2,6 +2,7 @@ import "./i18n/en"
 import View from "./view"
 import Form from "./form"
 import Element from "./element"
+import { ValidationError } from "./validator"
 import Config from "./config"
 import { debounced } from "./utils"
 import { Controller } from "stimulus"
@@ -10,34 +11,17 @@ export default class extends Controller {
   connect = () => this._setup()
   disconnect = () => this._removeEventListeners()
 
-  preventInvalidSubmission = (event) => {
-    if (this.form.isValid()) return
-
-    event.stopImmediatePropagation()
-    event.preventDefault()
-
-    this.form.elements.forEach((element) => {
-      if (element.isInvalid()) {
-        element.visited = true
-        this.display({
-          target: element.raw,
-          errorMessage: element.cachedErrorMessage,
-        })
-      }
-    })
-
-    this._focusFirstElement()
-  }
-
-  display({ target, errorMessage, previousMessage }) {
+  display({ target, errorMessage, previousMessage, visited }) {
     if (errorMessage === previousMessage && target.dataset.errorDisplayed) {
       return
     }
 
     if (errorMessage) {
-      this.view.displayError(target, errorMessage)
+      if (visited) {
+        this._view.displayError(target, errorMessage)
+      }
     } else {
-      this.view.reset(target)
+      this._view.reset(target)
     }
   }
 
@@ -53,42 +37,114 @@ export default class extends Controller {
   // private
 
   _setup() {
-    this.rawForm.noValidate = true
+    this.form.noValidate = true
 
     this.config = new Config(this.data)
-    this.form = new Form(this.rawForm, this.config)
-    this.view = new View(this.configurations)
+    this._form = new Form(this.form, this.config)
+    this._view = new View(this._configurations)
 
-    this.validate = debounced(this._validate, this.configurations.debounceMs)
+    this.validate = debounced(this._validate, this._configurations.debounceMs)
 
-    this._initialCheck()
+    if (this._configurations.disableSubmitButtons) {
+      this._setupMutiationObserver()
 
-    this.rawForm.addEventListener("submit", this.preventInvalidSubmission, true)
-    this.rawForm.addEventListener(
-      "ajax:beforeSend",
-      this.preventInvalidSubmission,
-      true
-    )
-    this.rawForm.addEventListener("input", this.validate, true)
-    this.rawForm.addEventListener("blur", this.recordVisit, true)
+      if (!this.data.has("validated")) this._initialCheck()
+    }
+
+    this.form.addEventListener("submit", this._preventInvalidSubmission, true)
+    this.form.addEventListener("input", this.validate, true)
+    this.form.addEventListener("valueUpdated", this.validate, true)
+    this.form.addEventListener("blur", this.recordVisit, true)
   }
 
   _removeEventListeners() {
-    this.rawForm.removeEventListener(
+    this.mutationObserver && this.mutationObserver.disconnect()
+    this.form.removeEventListener(
       "submit",
-      this.preventInvalidSubmission,
+      this._preventInvalidSubmission,
       true
     )
-    this.rawForm.removeEventListener(
-      "ajax:beforeSend",
-      this.preventInvalidSubmission,
-      true
-    )
-    this.rawForm.removeEventListener("input", this.validate, true)
-    this.rawForm.removeEventListener("blur", this.recordVisit, true)
+    this.form.removeEventListener("valueUpdated", this.validate, true)
+    this.form.removeEventListener("input", this.validate, true)
+    this.form.removeEventListener("blur", this.recordVisit, true)
   }
 
-  get rawForm() {
+  _setupMutiationObserver() {
+    this.mutationObserver = new MutationObserver((mutationList) => {
+      mutationList.forEach(({ addedNodes }) => {
+        if (!addedNodes || !addedNodes.length) return
+
+        addedNodes.forEach((node) => {
+          if (["select", "input"].includes(node.nodeName.toLowerCase())) {
+            // validate
+            addedNodes = true
+            const el = new Element(node, this.config)
+            el.validate().catch(() => this._toggleSubmitButtons(false))
+            // toggle submit
+          } else if (
+            node.querySelector &&
+            node.querySelector("input, select")
+          ) {
+            addedNodes
+            node.querySelectorAll("input, select").forEach((el) => {
+              // validate
+              el = new Element(el, this.config)
+              // toggle submit
+              el.validate().catch(() => this._toggleSubmitButtons(false))
+            })
+          }
+        })
+
+        if (addedNodes) this._toggleSubmitButtons(this._form.isValid())
+      })
+    })
+
+    this.mutationObserver.observe(this.form, {
+      childList: true,
+      subtree: true,
+    })
+  }
+
+  _preventInvalidSubmission = (event) => {
+    if (this._configurations.disableSubmitButtons) {
+      if (this._form.isValid()) return
+
+      event.stopImmediatePropagation()
+      event.stopPropagation()
+      event.preventDefault()
+
+      this._displayFormErrors()
+    }
+    const { submitter } = event
+    if (submitter.hasAttribute("data-validation-submitter")) {
+      submitter.remove()
+      return
+    }
+
+    event.stopPropagation()
+    event.stopImmediatePropagation()
+    event.preventDefault()
+    if (this.validationInProgress) return
+    this.validationInProgress = true
+
+    this._form
+      .validate()
+      .then(() => {
+        this.validationInProgress = false
+        this._submitWithCustomSubmitter(submitter)
+      })
+      .catch((error) => {
+        if (error instanceof ValidationError) {
+          this.validationInProgress = false
+          this._displayFormErrors()
+        } else {
+          console.log(error)
+          throw error
+        }
+      })
+  }
+
+  get form() {
     if (this.element.nodeName === "FORM") {
       return this.element
     } else {
@@ -97,7 +153,7 @@ export default class extends Controller {
   }
 
   async _initialCheck() {
-    this.form
+    this._form
       .validate()
       .then(() => this._toggleSubmitButtons(true))
       .catch(() => this._toggleSubmitButtons(false))
@@ -115,37 +171,74 @@ export default class extends Controller {
 
     try {
       await el.validate()
+
+      if (target.type === "radio") {
+        await this._form.validate().catch(() => {})
+      }
     } catch (error) {
-      if (typeof error === "string") {
-        errorMessage = error
+      if (error instanceof ValidationError) {
+        errorMessage = error.message
       } else {
         throw error
       }
     }
 
-    this._toggleSubmitButtons(this.form.isValid())
+    this._toggleSubmitButtons(this._form.isValid())
 
-    if (el.visited) {
-      this.display({ target, errorMessage, previousMessage })
-    }
+    this.display({ target, errorMessage, previousMessage, visited: el.visited })
   }
 
   _toggleSubmitButtons(bool) {
-    if (!this.configurations.disableSubmitButtons) return
+    if (!this._configurations.disableSubmitButtons) return
 
-    this.form.submitButtons.forEach((submit) => (submit.disabled = !bool))
+    this._form.submitButtons.forEach((submit) => {
+      submit.disabled = !bool
+    })
   }
 
   _focusFirstElement() {
-    if (!this.configurations.focusOnError) {
+    if (!this._configurations.focusOnError) {
       return
     }
 
-    this.form.elementsWithError[0].focus()
+    const element = this._form.elementsWithError[0]
+    element && element.raw.focus()
   }
 
-  get configurations() {
+  get _configurations() {
     return this.config.configurations
+  }
+
+  _submitWithCustomSubmitter(originalSubmitter) {
+    const input = document.createElement("template")
+    input.innerHTML = `
+      <input type="submit" 
+      style="display: none;" 
+      data-validation-submitter 
+      name="${originalSubmitter.name}" 
+      value="${originalSubmitter.value}" 
+    />
+    `
+    this._form.raw.appendChild(input.content)
+
+    setTimeout(() => {
+      this._form.raw.querySelector("[data-validation-submitter]").click()
+    })
+  }
+
+  _displayFormErrors() {
+    this._form.elements.forEach((element) => {
+      if (element.isInvalid()) {
+        element.visited = true
+        this.display({
+          target: element.raw,
+          errorMessage: element.cachedErrorMessage,
+          visited: true,
+        })
+      }
+    })
+
+    this._focusFirstElement()
   }
 }
 

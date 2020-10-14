@@ -1,5 +1,5 @@
-import ValidationError from "./validation_error"
-
+import Validator from "./validator"
+import { ValidationError } from "./validator"
 const validInputTypes = [
   "checkbox",
   "color",
@@ -42,8 +42,8 @@ export default class {
 
         resolve()
       } catch (error) {
-        if (typeof error === "string") {
-          this.cacheErrorMessage(error)
+        if (error instanceof ValidationError) {
+          this.cacheErrorMessage(error.message)
           reject(error)
         } else {
           throw error
@@ -103,6 +103,6 @@ export default class {
   }
 
   _errorMessage() {
-    return new ValidationError(this.raw, this.config).message()
+    return new Validator(this.raw, this.config).message()
   }
 }

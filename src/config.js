@@ -1,13 +1,13 @@
 const validators = {}
 const configurations = {
-  debounceMs: 175, // integer
-  focusOnError: true, // true/false
-  disableSubmitButtons: true,
+  debounceMs: 175,
+  focusOnError: true,
+  disableSubmitButtons: false,
   containerSelector: "[data-field-container]",
   errorMessageClass: "error-message",
-  errorMessagePosition: "end", // start/end
-  containerErrorClass: "container-error", // any css class
-  fieldErrorClass: "field-error", // any css class
+  errorMessagePosition: "end",
+  containerErrorClass: "container-error",
+  fieldErrorClass: "field-error",
 }
 
 const locals = {}
@@ -28,20 +28,8 @@ const config = (options = {}) => {
   Object.assign(configurations, options)
 }
 
-const timeOutPromise = (promise, timeoutMs) => {
-  const timeOutProm = new Promise((resolve, _) => {
-    setTimeout(() => {
-      resolve()
-    }, timeoutMs)
-  })
-
-  return (el) => {
-    return Promise.race([promise(el), timeOutProm])
-  }
-}
-
-const addValidator = (name, func, timeoutMS = 100) => {
-  validators[name] = timeOutPromise(func, timeoutMS)
+const addValidator = (name, func) => {
+  validators[name] = func
 }
 
 const addLocal = (name, transalation) => {
@@ -59,7 +47,6 @@ export default class {
     this.locals = Object.assign({}, locals)
     this.validators = Object.assign({}, validators)
     this.configurations = Object.assign({}, configurations)
-    // extract data-attributes
 
     Object.keys(this.configurations).forEach((key) => {
       if (dataMap.has(key)) {

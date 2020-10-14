@@ -14,6 +14,7 @@
     "build": "rollup -c",
     "dev": "rollup -wc"
   },
+  "homepage": "https://github.com/jwald1/stimulus-form-validation",
   "dependencies": {
     "stimulus": "^1.1.1"
   },

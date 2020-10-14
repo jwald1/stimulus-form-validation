@@ -65,7 +65,7 @@ function userNameAvailable(element) {
   const { value } = element
 
   return new Promise(async (resolve, reject) => {
-    const available = fetch(`usernameexamples.com/${value}`)
+    const available = await fetch(`usernameexamples.com/${value}`)
 
     available ? resolve() : reject("Username not available")
   })
@@ -78,12 +78,6 @@ Next, register the function:
 import { addValidation } from "stimulus-form-validation"
 
 addValidation("userNameAvailable", userNameAvailable)
-```
-
-By default the validation function will timeout after 100ms, but you can overwrite it, like so:
-
-```javascript
-addValidation("userNameAvailable", userNameAvailable, 200)
 ```
 
 Finaly add `data-validates="userNameAvailable"` to the input element
@@ -106,7 +100,6 @@ Default configruation
 {
   containerSelector: "[data-field-container]",
   errorMessageClass: "error-message",
-  useHtml5Messages: false,
   errorMessagePosition: "end",
   containerErrorClass: "container-error",
   fieldErrorClass: "field-error",
@@ -124,7 +117,6 @@ Default configruation
 | `fieldErrorClass`      |           Class added to the field if the field has an error           |       `data-identifier-field-error-class` |
 | `debounceMs`           |                      Validate debounce time in ms                      |             `data-identifier-debounce-ms` |
 | `focusOnError`         |    Whether to focus the first field if there is an error on submit     |          `data-identifier-focus-on-error` |
-| `useHtml5Messages`     |          If we should the browser's built in error messages.           |      `data-identifier-use-html5-messages` |
 
 Can be overwritten via a data attribute or globaly like so:
 
