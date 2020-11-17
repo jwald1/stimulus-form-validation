@@ -71,31 +71,14 @@ export default class extends Controller {
 
   _setupMutiationObserver() {
     this.mutationObserver = new MutationObserver((mutationList) => {
-      mutationList.forEach(({ addedNodes }) => {
-        if (!addedNodes || !addedNodes.length) return
+      const nodesNeedsValidation = this._nodesNeedsValidation(mutationList)
 
-        addedNodes.forEach((node) => {
-          if (["select", "input"].includes(node.nodeName.toLowerCase())) {
-            // validate
-            addedNodes = true
-            const el = new Element(node, this.config)
-            el.validate().catch(() => this._toggleSubmitButtons(false))
-            // toggle submit
-          } else if (
-            node.querySelector &&
-            node.querySelector("input, select")
-          ) {
-            addedNodes
-            node.querySelectorAll("input, select").forEach((el) => {
-              // validate
-              el = new Element(el, this.config)
-              // toggle submit
-              el.validate().catch(() => this._toggleSubmitButtons(false))
-            })
-          }
-        })
+      if (!nodesNeedsValidation.length) return
 
-        if (addedNodes) this._toggleSubmitButtons(this._form.isValid())
+      this._toggleSubmitButtons(this._form.isValid())
+
+      nodesNeedsValidation.forEach((el) => {
+        el.validate().catch(() => this._toggleSubmitButtons(false))
       })
     })
 
@@ -103,6 +86,35 @@ export default class extends Controller {
       childList: true,
       subtree: true,
     })
+  }
+
+  _nodesNeedsValidation(mutationList) {
+    const nodesNeedsValidation = []
+
+    mutationList.forEach(({ addedNodes }) => {
+      if (!addedNodes) return
+      addedNodes.forEach((node) => {
+        if (
+          ["select", "input", "textarea"].includes(node.nodeName.toLowerCase())
+        ) {
+          const el = new Element(node, this.config)
+
+          if (el.willValidate) {
+            nodesNeedsValidation.push(el)
+          }
+        } else if (node.querySelector && node.querySelector("input, select")) {
+          node.querySelectorAll("input, select", "textarea").forEach((node) => {
+            const el = new Element(node, this.config)
+
+            if (el.willValidate) {
+              nodesNeedsValidation.push(el)
+            }
+          })
+        }
+      })
+    })
+
+    return nodesNeedsValidation
   }
 
   _preventInvalidSubmission = (event) => {

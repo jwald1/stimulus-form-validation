@@ -780,32 +780,48 @@ let _default$4 = /*#__PURE__*/function (_Controller) {
     key: "_setupMutiationObserver",
     value: function _setupMutiationObserver() {
       this.mutationObserver = new MutationObserver(mutationList => {
-        mutationList.forEach(({
-          addedNodes
-        }) => {
-          if (!addedNodes || !addedNodes.length) return;
-          addedNodes.forEach(node => {
-            if (["select", "input"].includes(node.nodeName.toLowerCase())) {
-              // validate
-              addedNodes = true;
-              const el = new _default$3(node, this.config);
-              el.validate().catch(() => this._toggleSubmitButtons(false)); // toggle submit
-            } else if (node.querySelector && node.querySelector("input, select")) {
-              node.querySelectorAll("input, select").forEach(el => {
-                // validate
-                el = new _default$3(el, this.config); // toggle submit
+        const nodesNeedsValidation = this._nodesNeedsValidation(mutationList);
 
-                el.validate().catch(() => this._toggleSubmitButtons(false));
-              });
-            }
-          });
-          if (addedNodes) this._toggleSubmitButtons(this._form.isValid());
+        if (!nodesNeedsValidation.length) return;
+
+        this._toggleSubmitButtons(this._form.isValid());
+
+        nodesNeedsValidation.forEach(el => {
+          el.validate().catch(() => this._toggleSubmitButtons(false));
         });
       });
       this.mutationObserver.observe(this.form, {
         childList: true,
         subtree: true
       });
+    }
+  }, {
+    key: "_nodesNeedsValidation",
+    value: function _nodesNeedsValidation(mutationList) {
+      const nodesNeedsValidation = [];
+      mutationList.forEach(({
+        addedNodes
+      }) => {
+        if (!addedNodes) return;
+        addedNodes.forEach(node => {
+          if (["select", "input", "textarea"].includes(node.nodeName.toLowerCase())) {
+            const el = new _default$3(node, this.config);
+
+            if (el.willValidate) {
+              nodesNeedsValidation.push(el);
+            }
+          } else if (node.querySelector && node.querySelector("input, select")) {
+            node.querySelectorAll("input, select", "textarea").forEach(node => {
+              const el = new _default$3(node, this.config);
+
+              if (el.willValidate) {
+                nodesNeedsValidation.push(el);
+              }
+            });
+          }
+        });
+      });
+      return nodesNeedsValidation;
     }
   }, {
     key: "_initialCheck",
