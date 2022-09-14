@@ -5,9 +5,9 @@ import Element from "./element"
 import { ValidationError } from "./validator"
 import Config from "./config"
 import { debounced } from "./utils"
-import { Controller } from "stimulus"
+import { Controller } from "@hotwired/stimulus"
 
-export default class extends Controller {
+class ValidationController extends Controller {
   connect = () => this._setup()
   disconnect = () => this._removeEventListeners()
 
@@ -256,4 +256,4 @@ export default class extends Controller {
 
 import { addValidator, config } from "./config"
 
-export { addValidator, config }
+export { addValidator, config, ValidationController }

@@ -2,7 +2,7 @@
 
 Object.defineProperty(exports, '__esModule', { value: true });
 
-var stimulus = require('stimulus');
+var stimulus = require('@hotwired/stimulus');
 
 function _classCallCheck(instance, Constructor) {
   if (!(instance instanceof Constructor)) {
@@ -624,15 +624,15 @@ const debounced = (fn, wait) => {
   };
 };
 
-let _default$4 = /*#__PURE__*/function (_Controller) {
-  _inherits(_default$2, _Controller);
+let ValidationController = /*#__PURE__*/function (_Controller) {
+  _inherits(ValidationController, _Controller);
 
-  var _super = _createSuper(_default$2);
+  var _super = _createSuper(ValidationController);
 
-  function _default$2(...args) {
+  function ValidationController(...args) {
     var _this;
 
-    _classCallCheck(this, _default$2);
+    _classCallCheck(this, ValidationController);
 
     _this = _super.call(this, ...args);
 
@@ -726,7 +726,7 @@ let _default$4 = /*#__PURE__*/function (_Controller) {
     return _this;
   }
 
-  _createClass(_default$2, [{
+  _createClass(ValidationController, [{
     key: "display",
     value: function display({
       target,
@@ -898,10 +898,10 @@ let _default$4 = /*#__PURE__*/function (_Controller) {
     }
   }]);
 
-  return _default$2;
+  return ValidationController;
 }(stimulus.Controller);
 
+exports.ValidationController = ValidationController;
 exports.addValidator = addValidator;
 exports.config = config;
-exports.default = _default$4;
 //# sourceMappingURL=index.js.map

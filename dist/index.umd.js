@@ -1,6 +1,6 @@
 (function (global, factory) {
-  typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports, require('stimulus')) :
-  typeof define === 'function' && define.amd ? define(['exports', 'stimulus'], factory) :
+  typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports, require('@hotwired/stimulus')) :
+  typeof define === 'function' && define.amd ? define(['exports', '@hotwired/stimulus'], factory) :
   (global = global || self, factory(global['stimulus-form-validation'] = {}, global.Stimulus));
 }(this, (function (exports, stimulus) { 'use strict';
 
@@ -624,15 +624,15 @@
     };
   };
 
-  let _default$4 = /*#__PURE__*/function (_Controller) {
-    _inherits(_default$2, _Controller);
+  let ValidationController = /*#__PURE__*/function (_Controller) {
+    _inherits(ValidationController, _Controller);
 
-    var _super = _createSuper(_default$2);
+    var _super = _createSuper(ValidationController);
 
-    function _default$2(...args) {
+    function ValidationController(...args) {
       var _this;
 
-      _classCallCheck(this, _default$2);
+      _classCallCheck(this, ValidationController);
 
       _this = _super.call(this, ...args);
 
@@ -726,7 +726,7 @@
       return _this;
     }
 
-    _createClass(_default$2, [{
+    _createClass(ValidationController, [{
       key: "display",
       value: function display({
         target,
@@ -898,12 +898,12 @@
       }
     }]);
 
-    return _default$2;
+    return ValidationController;
   }(stimulus.Controller);
 
+  exports.ValidationController = ValidationController;
   exports.addValidator = addValidator;
   exports.config = config;
-  exports.default = _default$4;
 
   Object.defineProperty(exports, '__esModule', { value: true });
 

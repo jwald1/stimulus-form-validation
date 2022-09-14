@@ -7,7 +7,7 @@ const name = pkg.name
 
 export default {
   input: "src/index.js",
-  external: ["stimulus"],
+  external: ["@hotwired/stimulus"],
   output: [
     {
       file: "dist/index.js",
@@ -25,7 +25,7 @@ export default {
       name,
       sourcemap: true,
       globals: {
-        stimulus: "Stimulus",
+        "@hotwired/stimulus": "Stimulus",
       },
     },
   ],

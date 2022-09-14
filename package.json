@@ -8,17 +8,15 @@
   "source": "src/index.js",
   "author": "@jwald1",
   "license": "MIT",
-  "external": "stimulus",
+  "external": "@hotwired/stimulus",
   "scripts": {
     "start": "webpack-dev-server --mode development --host 0.0.0.0",
     "build": "rollup -c",
     "dev": "rollup -wc"
   },
   "homepage": "https://github.com/jwald1/stimulus-form-validation",
-  "dependencies": {
-    "stimulus": "^2.0.0"
-  },
   "devDependencies": {
+    "@hotwired/stimulus": ">=3",
     "@babel/core": "^7.10.5",
     "@babel/plugin-proposal-class-properties": "^7.10.4",
     "@babel/plugin-transform-classes": "^7.10.4",
@@ -34,5 +32,8 @@
     "webpack": "^4.43.0",
     "webpack-cli": "^3.3.12",
     "webpack-dev-server": "^3.11.0"
+  },
+  "peerDependencies": {
+    "@hotwired/stimulus": ">= 3"
   }
 }
